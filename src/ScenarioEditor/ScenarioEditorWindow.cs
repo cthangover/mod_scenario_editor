@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using Cthangover.Core.Scenes;
 using Cthangover.Core.UI.Theming;
 using Cthangover.Core.Utils;
@@ -81,6 +82,98 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
         public void OpenScenario(string modId, string relativePath)
             => OpenScenario(ScenarioFileService.MakeKey(modId, relativePath));
 
+        /// <summary>Key of the scenario open in the active tab (<c>mod:path</c>), or null when the graph is shown.</summary>
+        public string OpenKey => _editTabs.HasActiveFile ? _editTabs.CurrentKey : null;
+
+        /// <summary>
+        /// Writes a new scenario file <c>scenarios/&lt;name&gt;.scenario</c> into a folder mod, opens it in a text
+        /// tab and returns its key; null (with a status line) when the name is not a plain file name, the file
+        /// exists or the mod is read-only. The file holds one placeholder line, so the command palette can insert
+        /// its lines into it at once, and nothing is written until the author saves.
+        /// </summary>
+        public string CreateScenario(string modId, string name)
+        {
+            if (string.IsNullOrEmpty(modId) || !Regex.IsMatch(name ?? string.Empty, "^[a-z0-9_]+$"))
+            {
+                SetStatus(ToolUi.Tr("tools/scenario_editor/name_invalid"), ToolStatusKind.Error);
+                return null;
+            }
+
+            var relativePath = ScenariosDir + "/" + name + ScenarioExtension;
+            if (ModFileService.ReadText(modId, relativePath) != null)
+            {
+                SetStatus(string.Format(ToolUi.Tr("tools/scenario_editor/name_exists"), ScenarioFileService.GetDisplayPath(modId, relativePath)), ToolStatusKind.Error);
+                return null;
+            }
+
+            if (!ModFileService.WriteText(modId, relativePath, "text \"…\"\nend\n"))
+            {
+                SetStatus(ToolUi.Tr("tools/scenario_editor/readonly_zip"), ToolStatusKind.Error);
+                return null;
+            }
+
+            var key = ScenarioFileService.MakeKey(modId, relativePath);
+            _fileTreePanel.Reload();
+            SceneManager.ReloadContent();
+            OpenScenario(key);
+            SetStatus(string.Format(ToolUi.Tr("tools/scenario_editor/created"), ScenarioFileService.GetDisplayPath(modId, relativePath)), ToolStatusKind.Ok);
+            GameLogger.Log("SCENARIO_EDITOR", $"Created: {modId}/{relativePath}");
+            return key;
+        }
+
+        /// <summary>Saves the active file as Ctrl+S does; false when no file is open or the save failed.</summary>
+        public bool SaveActive()
+        {
+            if (!_editTabs.HasActiveFile)
+                return false;
+            OnSavePressed();
+            return !_editTabs.IsCurrentDirty;
+        }
+
+        private const string ScenariosDir = "scenarios";
+        private const string ScenarioExtension = ".scenario";
+
+        /// <summary>Opens the new-scenario dialog: a folder mod and a file name.</summary>
+        private void OnNewPressed()
+        {
+            var writable = ModFileService.ListWritableMods();
+            if (writable.Count == 0)
+            {
+                SetStatus(ToolUi.Tr("tools/scenario_editor/readonly_zip"), ToolStatusKind.Error);
+                return;
+            }
+
+            var modSelect = new OptionButton { CustomMinimumSize = new Vector2(320, 0) };
+            var preferred = _editTabs.HasActiveFile ? _editTabs.CurrentModId : null;
+            for (var i = 0; i < writable.Count; i++)
+            {
+                modSelect.AddItem(writable[i]);
+                if (writable[i] == preferred)
+                    modSelect.Selected = i;
+            }
+
+            var nameEdit = new LineEdit { PlaceholderText = ToolUi.Tr("tools/scenario_editor/new_name_tip"), CustomMinimumSize = new Vector2(320, 0) };
+            var box = new VBoxContainer();
+            ToolUi.Field(box, "tools/scenario_editor/new_mod", modSelect);
+            ToolUi.Field(box, "tools/scenario_editor/new_name", nameEdit);
+
+            var dialog = new ConfirmationDialog
+            {
+                Title = ToolUi.Tr("tools/scenario_editor/new_title"),
+                OkButtonText = ToolUi.Tr("tools/scenario_editor/new_create"),
+                Exclusive = true,
+            };
+            dialog.AddChild(box);
+            dialog.Confirmed += () =>
+            {
+                CreateScenario(modSelect.GetItemText(modSelect.Selected), nameEdit.Text.Trim());
+                dialog.QueueFree();
+            };
+            dialog.Canceled += dialog.QueueFree;
+            AddChild(dialog);
+            dialog.PopupCentered(new Vector2I(480, 220));
+        }
+
         /// <summary>Returns from play-test mode as soon as the in-game test play ends.</summary>
         public override void _Process(double delta)
         {
@@ -110,6 +203,7 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
             _openFileBtn = ToolUi.Button("tools/scenario_editor/open_file", OnOpenFilePressed, ButtonKind.Secondary, "tools/scenario_editor/open_file_tip");
             toolbar.AddChild(_openFileBtn);
             toolbar.AddChild(ToolUi.Divider());
+            toolbar.AddChild(ToolUi.Button("tools/scenario_editor/new", OnNewPressed, ButtonKind.Secondary, "tools/scenario_editor/new_tip"));
             toolbar.AddChild(ToolUi.Button("tools/scenario_editor/rescan", OnRescanPressed, ButtonKind.Secondary, "tools/scenario_editor/rescan_tip"));
 
             _filePathLabel = new Label

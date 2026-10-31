@@ -1,0 +1,11 @@
+{
+  "name": "New Scenario Test",
+  "description": "GUI test of the scenario editor in rpg_plus, without the dev tools: the New button's rule makes scenarios/itest_new_scenario.scenario in the game's mod, a bad name and an existing file are refused, the command palette inserts 'action stat.add stat=str value=2' into the open scenario, Ctrl+S-equivalent saves it, and the file the test made is removed. Activated by --itest=new_scenario with --game=rpg_plus --new.",
+  "sources": [
+    "src/*.cs"
+  ],
+  "depends": [
+    "rpg_plus_game>=1",
+    "schema_tools>=1"
+  ]
+}

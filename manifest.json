@@ -20,6 +20,12 @@
       "activate": [
         "--itest=ingame_play"
       ]
+    },
+    {
+      "id": "new_scenario",
+      "activate": [
+        "--itest=new_scenario"
+      ]
     }
   ]
 }
