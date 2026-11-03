@@ -1,6 +1,7 @@
 using System;
 using System.Text.RegularExpressions;
 using Cthangover.Core.Scenes;
+using Cthangover.Mods.Dialog;
 using Cthangover.Core.UI.Theming;
 using Cthangover.Core.Utils;
 using Cthangover.Mods.Interface.Theming;
@@ -38,6 +39,11 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
         private Label _filePathLabel;
 
         private bool _playActive;
+        private bool _lastSaveSucceeded;
+        private bool _ambientPreviewActive;
+        private bool _ambientPreviewSeen;
+        private string _ambientPreviewId;
+        private IBackgroundScenarioTools _observationProvider;
         private string _pendingKey;
         private string _returnRoute;
         private string _returnScene;
@@ -48,12 +54,15 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
             CthangoverTheme.Apply(this);
             BuildUI();
             FocusEntered += _editTabs.ActivateTarget;
+            VisibilityChanged += OnObservationVisibilityChanged;
+            TreeExiting += OnObservationLeaving;
             SetHint(ToolUi.Tr("tools/scenario_editor/hint"));
         }
 
         /// <summary>Opens with the graph view so the editor starts on the cross-scene map, or on the file asked for by <see cref="OpenScenario"/>.</summary>
         public override void _Ready()
         {
+            OnObservationVisibilityChanged();
             _editTabs.SetViewToGraph();
             if (_pendingKey != null)
                 OpenScenario(_pendingKey);
@@ -127,7 +136,7 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
             if (!_editTabs.HasActiveFile)
                 return false;
             OnSavePressed();
-            return !_editTabs.IsCurrentDirty;
+            return _lastSaveSucceeded;
         }
 
         private const string ScenariosDir = "scenarios";
@@ -177,8 +186,29 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
         /// <summary>Returns from play-test mode as soon as the in-game test play ends.</summary>
         public override void _Process(double delta)
         {
+            if (_observationProvider != BackgroundScenarios.Provider) OnObservationVisibilityChanged();
+            if (_ambientPreviewActive)
+            {
+                var found = false;
+                if (BackgroundScenarios.Provider != null)
+                    foreach (var run in BackgroundScenarios.Provider.Executions()) if (run.ScenarioId == _ambientPreviewId) found = true;
+                if (found) _ambientPreviewSeen = true;
+                else if (_ambientPreviewSeen || BackgroundScenarios.Provider == null) ReturnFromAmbientPreview();
+            }
             if (_playActive && !SceneManager.IsTestPlayActive)
                 ReturnFromPlay();
+        }
+
+        private void OnObservationVisibilityChanged()
+        {
+            if (_observationProvider != null) _observationProvider.Observe(this, false);
+            _observationProvider = BackgroundScenarios.Provider;
+            _observationProvider?.Observe(this, Visible && IsInsideTree());
+        }
+        private void OnObservationLeaving()
+        {
+            _observationProvider?.Observe(this, false);
+            _observationProvider = null;
         }
 
         private void BuildUI()
@@ -329,6 +359,7 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
 
         private void OnSavePressed()
         {
+            _lastSaveSucceeded = false;
             if (!_editTabs.HasActiveFile)
                 return;
 
@@ -337,6 +368,11 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
             var text = _editTabs.CurrentText;
             try
             {
+                if (BackgroundScenarios.Provider != null && !BackgroundScenarios.Provider.Validate(modId, relativePath, text, out var validationError))
+                {
+                    SetStatus(validationError, ToolStatusKind.Error);
+                    return;
+                }
                 if (!ScenarioFileService.WriteAllText(modId, relativePath, text))
                 {
                     SetStatus(ToolUi.Tr("tools/scenario_editor/readonly_zip"), ToolStatusKind.Error);
@@ -344,6 +380,7 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
                 }
 
                 _editTabs.SaveCurrentFile();
+                _lastSaveSucceeded = true;
                 // The running game caches scenario headers and texts: drop them, so a new or
                 // edited scenario plays on the next entry into its scene without a mod reload.
                 SceneManager.ReloadContent();
@@ -386,6 +423,23 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
 
             var text = _editTabs.CurrentText;
             var metadata = ScenarioFileService.ParseMetadata(text);
+            var (header, _) = Cthangover.Core.Scenarios.ScenarioMetadata.ParseMetadata(text);
+            if (header.TryGetValue("channel", out var channel) && channel == "ambient")
+            {
+                var tools = BackgroundScenarios.Provider;
+                if (tools == null) { SetStatus(ToolUi.Tr("tools/scenario_editor/ambient_missing"), ToolStatusKind.Error); return; }
+                if (!tools.Validate(_editTabs.CurrentModId, _editTabs.CurrentRelativePath, text, out var error)
+                    || !tools.Play(_editTabs.CurrentModId, _editTabs.CurrentRelativePath, text, false, out error))
+                { SetStatus(error, ToolStatusKind.Error); return; }
+                _ambientPreviewId = _editTabs.CurrentRelativePath.Substring(10, _editTabs.CurrentRelativePath.Length - 19);
+                _ambientPreviewActive = true; _ambientPreviewSeen = false;
+                _stopOverlay = CreateStopOverlay();
+                GetTree().Root.AddChild(_stopOverlay);
+                Hide();
+                return;
+            }
+            if (header.ContainsKey("patch_of"))
+            { SetStatus(ToolUi.Tr("tools/scenario_editor/ambient_patch_play"), ToolStatusKind.Error); return; }
 
             if (metadata.Scene == "-")
             {
@@ -454,8 +508,28 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
 
         private void OnStopPressed()
         {
+            if (_ambientPreviewActive)
+            {
+                BackgroundScenarios.Provider?.Command(_ambientPreviewId, "cancel_preview", out _);
+                ReturnFromAmbientPreview();
+                return;
+            }
             SceneManager.IsTestPlayActive = false;
             ReturnFromPlay();
+        }
+
+        private void ReturnFromAmbientPreview()
+        {
+            _ambientPreviewActive = false; _ambientPreviewSeen = false;
+            if (_stopOverlay != null) { _stopOverlay.QueueFree(); _stopOverlay = null; }
+            Show(); GrabFocus();
+            SetStatus(ToolUi.Tr("tools/scenario_editor/play_stopped"));
+        }
+        protected override void Cleanup()
+        {
+            if (_ambientPreviewActive) BackgroundScenarios.Provider?.Command(_ambientPreviewId, "cancel_preview", out _);
+            _ambientPreviewActive = false;
+            if (_stopOverlay != null) { _stopOverlay.QueueFree(); _stopOverlay = null; }
         }
 
         private void ReturnFromPlay()
@@ -496,6 +570,7 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
             var layer = new CanvasLayer { Layer = 128 };
 
             var btn = ToolUi.Button("tools/scenario_editor/stop", OnStopPressed, ButtonKind.Danger);
+            btn.Name = "ReturnToEditor";
             btn.Theme = ToolTheme.Get();
             btn.CustomMinimumSize = new Vector2(120, 36);
 
