@@ -32,6 +32,7 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
         private ScenarioInfoPanel _infoPanel;
         private ScenarioThumbnailPanel _thumbPanel;
         private Timer _infoTimer;
+        private bool _infoRefreshPending;
 
         private Button _saveBtn;
         private Button _openFileBtn;
@@ -285,12 +286,30 @@ namespace Cthangover.Core.UI.Tool.ScenarioEditor
             _editTabs.GraphTabSelected += OnGraphTabSelected;
             _editTabs.DirtyChanged += OnDirtyChanged;
             _editTabs.GraphFileRequested += OnGraphFileRequested;
-            _editTabs.BufferChanged += () => _infoTimer.Start();
+            _editTabs.BufferChanged += OnBufferChanged;
             mainSplit.AddChild(_editTabs);
 
             _infoTimer = new Timer { OneShot = true, WaitTime = InfoRefreshDelay };
             _infoTimer.Timeout += () => _infoPanel.Update(_editTabs.CurrentText);
+            _infoTimer.TreeEntered += OnInfoTimerEntered;
             AddChild(_infoTimer);
+        }
+
+        private void OnBufferChanged()
+        {
+            // Buffer signals can arrive while the window is detached or entering the tree.
+            _infoRefreshPending = true;
+            if (_infoTimer.IsInsideTree())
+                OnInfoTimerEntered();
+        }
+
+        private void OnInfoTimerEntered()
+        {
+            if (!_infoRefreshPending)
+                return;
+
+            _infoRefreshPending = false;
+            _infoTimer.Start();
         }
 
         private void OnFileSelected(string filePath)
