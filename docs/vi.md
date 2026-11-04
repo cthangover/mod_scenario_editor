@@ -21,10 +21,16 @@ Khi lưu, bộ nhớ đệm kịch bản của trò chơi bị xóa, nên lần 
 
 ## Giới hạn
 
-- Trình sửa không ngăn bạn lưu kịch bản có lỗi; kiểm tra tham chiếu hỏng là việc của Trình kiểm tra.
+- Validator kiểm tra tham chiếu giữa mod; lưu kịch bản thường không chạy toàn bộ kiểm tra. Khi có `npc_barks_base`, chương trình nền và bản vá không hợp lệ bị từ chối trước khi lưu; dòng trạng thái báo lỗi biên dịch.
 - Chỉ lưu được mod cài dạng thư mục. Tệp của mod đóng gói không được ghi, nhưng **▶ Chơi** vẫn chơi văn bản trong trình sửa.
 
 ## Phụ thuộc
 
 `tools_base`, `scenario_tools_base`, `dialog_base`, `ui_base`.
 Gói cũ `editor_tools` cài mod này cùng các cửa sổ tác giả khác.
+
+## Kịch bản nền đồng thời
+
+`channel: ambient` chạy qua `npc_barks_base` ngoài hàng đợi hội thoại modal. Mỗi lần chạy có biến, chờ, vai trò và trình gỡ lỗi riêng. Scenario Editor kiểm tra/lưu; F5 chạy thử bộ đệm. Studio → Background liệt kê định nghĩa và lần chạy; tạm dừng, bước, điểm dừng và đồng hồ chỉ tác động lần chạy được chọn.
+
+[npc_barks_base](../../npc_barks_base/docs/en.md)

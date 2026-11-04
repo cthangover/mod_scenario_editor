@@ -21,10 +21,16 @@ Saving drops the game's scenario caches, so the next time the scene is entered t
 
 ## Limits
 
-- The editor does not stop you from saving a scenario with a mistake; checking a mod for broken references is the Validator's job.
+- The Validator checks cross-mod references. Modal scenario saving does not perform a full Validator pass. With `npc_barks_base` loaded, invalid ambient programs and ambient patches are refused before saving; the status line reports the compilation error.
 - Only mods installed as folders can be saved. A file of a packed mod is not written, but **Play** still plays the text from the editor.
 
 ## Dependencies
 
 `tools_base`, `scenario_tools_base`, `dialog_base`, `ui_base`.
 The older `editor_tools` package installs this mod together with the other authoring windows.
+
+## Concurrent background scenarios
+
+`channel: ambient` runs through `npc_barks_base` outside the modal dialog queue. Each execution has its own variables, waits, roles and debugger. Scenario Editor validates/saves the source and F5 previews its buffer. Studio → Background lists definitions and runs; pause, step, breakpoints and clock advance target one execution.
+
+[npc_barks_base](../../npc_barks_base/docs/en.md)

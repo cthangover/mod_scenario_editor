@@ -21,10 +21,16 @@
 
 ## 限制
 
-- 编辑器不会阻止你保存有错误的剧本；检查模组中的失效引用是验证器的工作。
+- Validator 检查模组间引用；保存普通对话脚本不执行完整检查。加载 `npc_barks_base` 时，无效后台程序及其补丁会在写入前被拒绝，状态栏显示编译错误。
 - 只能保存以文件夹形式安装的模组。打包模组的文件不会被写入，但 **▶ 试玩**仍会播放编辑器中的文本。
 
 ## 依赖
 
 `tools_base`、`scenario_tools_base`、`dialog_base`、`ui_base`。
 旧的 `editor_tools` 包会把这个模组和其他创作窗口一起安装。
+
+## 并发背景剧本
+
+`channel: ambient` 由 `npc_barks_base` 在模态对话队列之外执行。每次执行都有独立变量、等待、角色和调试器。剧本编辑器验证并保存，F5 预览当前缓冲区。Studio → Background 分别列出定义与执行；暂停、单步、断点和时钟只针对选中的执行。
+
+[npc_barks_base](../../npc_barks_base/docs/en.md)

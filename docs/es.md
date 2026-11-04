@@ -21,10 +21,16 @@ Guardar vacía las cachés de escenarios del juego, así que la próxima vez que
 
 ## Límites
 
-- El editor no impide guardar un escenario con errores; revisar referencias rotas es tarea del Validador.
+- Validator comprueba referencias entre mods; guardar un escenario modal no ejecuta su revisión completa. Con `npc_barks_base`, los programas de ambiente y sus parches inválidos se rechazan antes de guardar; el estado muestra el error de compilación.
 - Solo se pueden guardar mods instalados como carpetas. El archivo de un mod empaquetado no se escribe, pero **▶ Jugar** sigue jugando el texto del editor.
 
 ## Dependencias
 
 `tools_base`, `scenario_tools_base`, `dialog_base`, `ui_base`.
 El paquete antiguo `editor_tools` instala este mod junto con las demás ventanas de autor.
+
+## Escenarios de fondo simultáneos
+
+`channel: ambient` usa `npc_barks_base` fuera del diálogo modal. Cada ejecución conserva sus variables, esperas, roles y depurador. Scenario Editor valida y guarda; F5 prueba el búfer. Studio → Background muestra definiciones y ejecuciones, con pausa, pasos, puntos de ruptura y reloj independientes.
+
+[npc_barks_base](../../npc_barks_base/docs/en.md)
