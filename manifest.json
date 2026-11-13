@@ -1,7 +1,7 @@
 {
   "id": "scenario_editor",
   "name": "Scenario Editor",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "author": "ct",
   "description": "Edit scenario text and transition graphs, then play-test inside the current game.",
   "category": "tools, editor",
@@ -9,10 +9,10 @@
     "src/**/*.cs"
   ],
   "depends": [
-    "tools_base>=1",
-    "scenario_tools_base>=1",
-    "dialog_base>=1",
-    "ui_base>=1"
+    "tools_base>=0.1.0",
+    "scenario_tools_base>=0.1.0",
+    "dialog_base>=0.1.0",
+    "ui_base>=0.1.0"
   ],
   "test_suites": [
     {
