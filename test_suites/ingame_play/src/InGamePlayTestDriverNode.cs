@@ -26,15 +26,15 @@ namespace Cthangover.Tools.Tests.InGamePlay
         private const string ResultName = "ingame_play";
         private const string GameModId = "my_novel_game";
         private const string ScenarioPath = "scenarios/my_novel_home.scenario";
-        private const float TickSeconds = 0.5f;
+        private const float TickSeconds = 0.05f;
         private const float TimeoutSeconds = 90f;
-        private const int GameSettleTicks = 6;
-        private const int PlaySettleTicks = 6;
 
         private int _passed;
         private int _failed;
         private int _step;
-        private int _settle;
+        private int _waitingStep = -1;
+        private ulong _waitStarted;
+        private ulong _readyFrame;
         private double _elapsed;
         private bool _finished;
         private ScenarioEditorWindow _window;
@@ -62,12 +62,12 @@ namespace Cthangover.Tools.Tests.InGamePlay
 
             var tree = GetTree();
             var scenes = tree.Root.GetNodeOrNull<GodotSceneService>("GodotSceneService");
+            if (!ReadyForStep(scenes))
+                return;
             switch (_step)
             {
                 case 0:
                     if (!Boot.IsReady || !ActiveGame.IsActive || InMainMenu(scenes) || GodotSceneService.IsTransitioning)
-                        return;
-                    if (++_settle < GameSettleTicks)
                         return;
                     Check(SceneManager.GetCurrentSceneName() == "my_novel_town", $"game entered its town (scene '{SceneManager.GetCurrentSceneName()}')");
                     _window = (ScenarioEditorWindow)ToolWindow.ShowWindow(new ScenarioEditorWindow());
@@ -78,7 +78,6 @@ namespace Cthangover.Tools.Tests.InGamePlay
 
                 case 1:
                     PressButton(_window, "tools/scenario_editor/play");
-                    _settle = 0;
                     break;
 
                 case 2:
@@ -91,17 +90,14 @@ namespace Cthangover.Tools.Tests.InGamePlay
                         return;
                     }
 
-                    if (++_settle < PlaySettleTicks)
-                        return;
                     Check(SceneManager.IsTestPlayActive, "play-test is still running while its dialog waits for the player");
                     Check(!_window.Visible, "the editor is hidden during the play-test");
                     Check(SceneManager.GetCurrentSceneName() == "my_novel_home", $"play-test entered the scenario's scene (scene '{SceneManager.GetCurrentSceneName()}')");
                     PressButton(tree.Root, "tools/scenario_editor/stop");
-                    _settle = 0;
                     break;
 
                 case 3:
-                    if (GodotSceneService.IsTransitioning || ++_settle < PlaySettleTicks)
+                    if (GodotSceneService.IsTransitioning)
                         return;
                     Check(!InMainMenu(scenes), "Stop returns into the game, not to the main menu");
                     Check(IsInstanceValid(_window) && _window.Visible, "the editor is visible again after Stop");
@@ -111,19 +107,17 @@ namespace Cthangover.Tools.Tests.InGamePlay
 
                 case 4:
                     PressButton(_window, "tools/scenario_editor/play");
-                    _settle = 0;
                     break;
 
                 case 5:
-                    if (GodotSceneService.IsTransitioning || ++_settle < PlaySettleTicks)
+                    if (GodotSceneService.IsTransitioning)
                         return;
                     // The played scenario's option "Back to the town" does exactly this.
                     tree.Root.GetNodeOrNull<SceneManager>("SceneManager")?.SwitchScene("my_novel_town");
-                    _settle = 0;
                     break;
 
                 case 6:
-                    if (GodotSceneService.IsTransitioning || ++_settle < PlaySettleTicks)
+                    if (GodotSceneService.IsTransitioning)
                         return;
                     Check(!InMainMenu(scenes), "a scene switch in the played scenario returns into the game, not to the main menu");
                     Check(!SceneManager.IsTestPlayActive, "leaving the played scene ends the play-test");
@@ -134,6 +128,45 @@ namespace Cthangover.Tools.Tests.InGamePlay
 
             _step++;
         }
+
+        private bool ReadyForStep(GodotSceneService scenes)
+        {
+            var now = Time.GetTicksMsec();
+            if (_waitingStep != _step)
+            {
+                _waitingStep = _step;
+                _waitStarted = now;
+                _readyFrame = 0;
+            }
+            if (now - _waitStarted > 15000)
+            {
+                Check(false, $"timed out waiting for game/play/editor readiness at step {_step}, scene '{SceneManager.GetCurrentSceneName()}'");
+                Finish();
+                return false;
+            }
+            var scene = SceneManager.GetCurrentSceneName();
+            var ready = _step switch
+            {
+                0 => Boot.IsReady && ActiveGame.IsActive && !InMainMenu(scenes) && scene == "my_novel_town",
+                1 or 4 => IsInstanceValid(_window) && _window.Visible,
+                2 => InMainMenu(scenes) || PlayIsReady(scene),
+                5 => PlayIsReady(scene),
+                3 or 6 => !SceneManager.IsTestPlayActive && IsInstanceValid(_window) && _window.Visible && scene == "my_novel_town",
+                _ => true
+            };
+            if (!ready || GodotSceneService.IsTransitioning)
+            {
+                _readyFrame = 0;
+                return false;
+            }
+            if (_readyFrame == 0)
+                _readyFrame = Engine.GetProcessFrames();
+            return Engine.GetProcessFrames() - _readyFrame >= 2;
+        }
+
+        private static bool PlayIsReady(string scene)
+            => SceneManager.IsTestPlayActive && scene == "my_novel_home"
+                && SceneContextNode.FindNode<Cthangover.Mods.Dialog.DialogBox>("DialogBox")?.IsRunning == true;
 
         private static bool InMainMenu(GodotSceneService scenes) => scenes?.CurrentGodotSceneName == "mainmenu";
 
