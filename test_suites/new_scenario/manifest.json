@@ -6,6 +6,6 @@
   ],
   "depends": [
     "rpg_plus_game>=0.1.0",
-    "schema_tools>=1"
+    "schema_tools>=0.1.0"
   ]
 }
