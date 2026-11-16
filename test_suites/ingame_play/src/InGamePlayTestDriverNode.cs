@@ -160,8 +160,8 @@ namespace Cthangover.Tools.Tests.InGamePlay
                 return false;
             }
             if (_readyFrame == 0)
-                _readyFrame = Engine.GetProcessFrames();
-            return Engine.GetProcessFrames() - _readyFrame >= 2;
+                _readyFrame = Godot.Engine.GetProcessFrames();
+            return Godot.Engine.GetProcessFrames() - _readyFrame >= 2;
         }
 
         private static bool PlayIsReady(string scene)
